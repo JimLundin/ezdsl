@@ -8,6 +8,7 @@ and utilities for working with generic types.
 
 from __future__ import annotations
 
+import types
 from dataclasses import dataclass
 from typing import dataclass_transform, get_args, get_origin, Any, ClassVar
 
@@ -81,8 +82,6 @@ def _substitute_type_params(type_expr: Any, substitutions: dict[Any, Any]) -> An
     Returns:
         The type expression with parameters substituted
     """
-    import types
-
     # If this is a type parameter, substitute it
     if type_expr in substitutions:
         return substitutions[type_expr]
