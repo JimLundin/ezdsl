@@ -15,6 +15,7 @@ from typing import (
     Any,
     TypeAliasType,
     TypeVar,
+    Union,
 )
 import types
 
@@ -113,8 +114,9 @@ def extract_type(py_type: Any) -> TypeDef:
     if origin is Ref:
         return RefType(extract_type(args[0]) if args else NoneType())
 
-    # UnionType (types.UnionType, created by | operator in Python 3.10+)
-    if isinstance(py_type, types.UnionType):
+    # UnionType - handle both typing.Union and types.UnionType (| operator)
+    # typing.Union is returned by get_type_hints(), types.UnionType by direct | usage
+    if isinstance(py_type, types.UnionType) or origin is Union:
         return UnionType(tuple(extract_type(a) for a in args))
 
     raise ValueError(f"Cannot extract type from: {py_type}")
