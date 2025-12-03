@@ -47,6 +47,9 @@ from nanodsl.schema import (
     extract_type,
     node_schema,
     all_schemas,
+    # Schema dataclasses
+    NodeSchema,
+    FieldSchema,
 )
 
 from nanodsl.ast import (
@@ -88,4 +91,6 @@ __all__ = [
     "extract_type",
     "node_schema",
     "all_schemas",
+    "NodeSchema",
+    "FieldSchema",
 ]

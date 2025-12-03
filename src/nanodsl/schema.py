@@ -8,6 +8,7 @@ type information for validation, documentation, and tooling support.
 from __future__ import annotations
 
 import dataclasses
+from dataclasses import dataclass
 from typing import (
     get_args,
     get_origin,
@@ -41,6 +42,29 @@ from nanodsl.types import (
     _substitute_type_params,
 )
 from nanodsl.serialization import to_dict
+
+# =============================================================================
+# Schema Dataclasses
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class FieldSchema:
+    """Schema for a node field."""
+
+    name: str
+    type: TypeDef
+
+
+@dataclass(frozen=True)
+class NodeSchema:
+    """Complete schema for a node class."""
+
+    tag: str
+    type_params: tuple[TypeParameter, ...]  # Type parameter declarations
+    returns: TypeDef
+    fields: tuple[FieldSchema, ...]
+
 
 # =============================================================================
 # Schema Extraction
