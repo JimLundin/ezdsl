@@ -311,6 +311,39 @@ class TypeParameterRef(TypeDef, tag="typeparamref"):
     name: str
 
 
+class ExternalType(TypeDef, tag="external"):
+    """
+    Reference to an externally registered type.
+
+    Used for third-party types like pandas.DataFrame, polars.DataFrame, etc.
+    Stores module and name to avoid collisions between different libraries.
+
+    Examples:
+        pd.DataFrame → ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
+        pl.DataFrame → ExternalType(module="polars.dataframe.frame", name="DataFrame", tag="pl_dataframe")
+    """
+
+    module: str  # Full module path
+    name: str    # Class name
+    tag: str     # User-supplied tag
+
+
+class CustomType(TypeDef, tag="custom"):
+    """
+    Reference to a user-defined custom type.
+
+    Used for types registered with the decorator style, where encode/decode
+    are methods on the class itself.
+
+    Example:
+        @TypeDef.register(tag="point")
+        class Point: ...
+        → CustomType(tag="point")
+    """
+
+    tag: str
+
+
 # =============================================================================
 # Type Parameter Substitution
 # =============================================================================

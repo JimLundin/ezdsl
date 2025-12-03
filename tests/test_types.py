@@ -11,10 +11,16 @@ from nanodsl.types import (
     NoneType,
     ListType,
     DictType,
+    SetType,
+    TupleType,
+    LiteralType,
     NodeType,
     RefType,
     UnionType,
     TypeParameter,
+    TypeParameterRef,
+    ExternalType,
+    CustomType,
 )
 
 
@@ -186,11 +192,16 @@ class TestTypeDefRegistry:
         assert TypeDef._registry["none"] == NoneType
         assert TypeDef._registry["list"] == ListType
         assert TypeDef._registry["dict"] == DictType
+        assert TypeDef._registry["set"] == SetType
+        assert TypeDef._registry["tuple"] == TupleType
+        assert TypeDef._registry["literal"] == LiteralType
         assert TypeDef._registry["node"] == NodeType
         assert TypeDef._registry["ref"] == RefType
         assert TypeDef._registry["union"] == UnionType
-        # TypeVar is an alias for TypeVar, both map to the same class
         assert TypeDef._registry["typeparam"] == TypeParameter
+        assert TypeDef._registry["typeparamref"] == TypeParameterRef
+        assert TypeDef._registry["external"] == ExternalType
+        assert TypeDef._registry["custom"] == CustomType
 
 
 class TestNestedTypes:
