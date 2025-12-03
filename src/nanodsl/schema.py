@@ -187,20 +187,39 @@ def _extract_node_returns(cls: type[Node[Any]]) -> TypeDef:
     return NoneType()
 
 
-def node_schema(cls: type[Node[Any]]) -> dict:
+def node_schema(cls: type[Node[Any]]) -> NodeSchema:
     """Get schema for a node class."""
     hints = get_type_hints(cls)
-    return {
-        "tag": cls._tag,
-        "returns": to_dict(_extract_node_returns(cls)),
-        "fields": [
-            {"name": f.name, "type": to_dict(extract_type(hints[f.name]))}
-            for f in dataclasses.fields(cls)
-            if not f.name.startswith("_")
-        ],
-    }
+
+    # Extract type parameters (PEP 695 generic classes)
+    type_params: list[TypeParameter] = []
+    if hasattr(cls, "__type_params__"):
+        for param in cls.__type_params__:
+            if isinstance(param, TypeVar):
+                bound = getattr(param, "__bound__", None)
+                type_params.append(
+                    TypeParameter(
+                        name=param.__name__,
+                        bound=extract_type(bound) if bound is not None else None,
+                    )
+                )
+
+    # Extract fields
+    fields: list[FieldSchema] = []
+    for f in dataclasses.fields(cls):
+        if not f.name.startswith("_"):
+            fields.append(
+                FieldSchema(name=f.name, type=extract_type(hints[f.name]))
+            )
+
+    return NodeSchema(
+        tag=cls._tag,
+        type_params=tuple(type_params),
+        returns=_extract_node_returns(cls),
+        fields=tuple(fields),
+    )
 
 
-def all_schemas() -> dict:
+def all_schemas() -> dict[str, NodeSchema]:
     """Get all registered node schemas."""
-    return {"nodes": {tag: node_schema(cls) for tag, cls in Node._registry.items()}}
+    return {tag: node_schema(cls) for tag, cls in Node._registry.items()}
