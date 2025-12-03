@@ -38,7 +38,6 @@ from nanodsl.types import (
     TypeParameter,
     TypeParameterRef,
     ExternalType,
-    CustomType,
     _substitute_type_params,
 )
 from nanodsl.serialization import to_dict

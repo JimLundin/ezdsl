@@ -20,7 +20,6 @@ from nanodsl.types import (
     TypeParameter,
     TypeParameterRef,
     ExternalType,
-    CustomType,
 )
 
 
@@ -201,7 +200,6 @@ class TestTypeDefRegistry:
         assert TypeDef._registry["typeparam"] == TypeParameter
         assert TypeDef._registry["typeparamref"] == TypeParameterRef
         assert TypeDef._registry["external"] == ExternalType
-        assert TypeDef._registry["custom"] == CustomType
 
 
 class TestNestedTypes:

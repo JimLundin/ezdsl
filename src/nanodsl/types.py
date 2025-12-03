@@ -72,126 +72,58 @@ class TypeDef:
     @classmethod
     def register(
         cls,
-        python_type: type | None = None,
+        python_type: type,
         *,
-        tag: str | None = None,
-        encode: Callable[[Any], dict] | None = None,
-        decode: Callable[[dict], Any] | None = None,
-    ) -> type | Callable[[type], type]:
+        encode: Callable[[Any], dict],
+        decode: Callable[[dict], Any],
+    ) -> type:
         """
-        Register a type with the type system.
+        Register an external type with the type system.
 
-        Two registration styles:
-
-        1. External types (function style with encode/decode):
-           TypeDef.register(
-               pd.DataFrame,
-               tag="dataframe",
-               encode=lambda df: {"data": df.to_dict()},
-               decode=lambda d: pd.DataFrame(d["data"])
-           )
-           Creates ExternalType(module="pandas.core.frame", name="DataFrame", tag="dataframe")
-
-        2. Custom types (decorator style with encode/decode methods):
-           @TypeDef.register(tag="point")
-           class Point:
-               def encode(self) -> dict: ...
-               @classmethod
-               def decode(cls, data: dict) -> Self: ...
-           Creates CustomType(tag="point")
+        Example:
+            TypeDef.register(
+                pd.DataFrame,
+                encode=lambda df: {"data": df.to_dict()},
+                decode=lambda d: pd.DataFrame(d["data"])
+            )
+            Creates ExternalType(module="pandas.core.frame", name="DataFrame")
 
         Args:
-            python_type: The Python class to register. If None, returns a decorator.
-            tag: Optional tag name. Defaults to lowercase class name.
-            encode: Optional encode function (external types only).
-            decode: Optional decode function (external types only).
+            python_type: The Python class to register.
+            encode: Function to encode instances to dict.
+            decode: Function to decode dict to instances.
 
         Returns:
-            If used as decorator: returns the original class unchanged
-            If used as function: returns the original class
+            The original python_type (unchanged).
         """
-        # Determine registration style
-        is_external = encode is not None or decode is not None
+        # Get type info
+        module = python_type.__module__
+        name = python_type.__name__
 
-        if is_external:
-            # External type registration (function style)
-            if python_type is None:
-                raise ValueError(
-                    "External type registration requires python_type argument"
-                )
-            if encode is None or decode is None:
-                raise ValueError(
-                    "External type registration requires both encode and decode functions"
-                )
-
-            # Get type info
-            type_tag = tag or python_type.__name__.lower()
-            module = python_type.__module__
-            name = python_type.__name__
-
-            # Check if already registered
-            if python_type in cls._external_types:
-                existing = cls._external_types[python_type]
-                if existing.tag == type_tag:
-                    return python_type  # Idempotent
-                raise ValueError(
-                    f"Type {python_type} already registered as external type "
-                    f"with tag '{existing.tag}'"
-                )
-            if python_type in cls._custom_types:
-                raise ValueError(
-                    f"Type {python_type} already registered as custom type"
-                )
-
-            # Create and store record
-            record = ExternalTypeRecord(
-                python_type=python_type,
-                module=module,
-                name=name,
-                tag=type_tag,
-                encode=encode,
-                decode=decode,
+        # Check if already registered
+        if python_type in cls._external_types:
+            existing = cls._external_types[python_type]
+            # Idempotent if same module/name
+            if existing.module == module and existing.name == name:
+                return python_type
+            raise ValueError(
+                f"Type {python_type} already registered as "
+                f"{existing.module}.{existing.name}"
             )
-            cls._external_types[python_type] = record
-            return python_type
 
-        else:
-            # Custom type registration (decorator style)
-            def _register_custom(py_type: type) -> type:
-                type_tag = tag or py_type.__name__.lower()
-
-                # Check if already registered
-                if py_type in cls._custom_types:
-                    existing = cls._custom_types[py_type]
-                    if existing.tag == type_tag:
-                        return py_type  # Idempotent
-                    raise ValueError(
-                        f"Type {py_type} already registered as custom type "
-                        f"with tag '{existing.tag}'"
-                    )
-                if py_type in cls._external_types:
-                    raise ValueError(
-                        f"Type {py_type} already registered as external type"
-                    )
-
-                # Note: encode/decode methods are optional for marker classes
-                # They're only required if you actually want to serialize/deserialize
-                # instances of this type
-
-                # Create and store record
-                record = CustomTypeRecord(python_type=py_type, tag=type_tag)
-                cls._custom_types[py_type] = record
-                return py_type
-
-            # If python_type provided, register directly
-            if python_type is not None:
-                return _register_custom(python_type)
-
-            # Otherwise return decorator
-            return _register_custom
+        # Create and store record
+        record = ExternalTypeRecord(
+            python_type=python_type,
+            module=module,
+            name=name,
+            encode=encode,
+            decode=decode,
+        )
+        cls._external_types[python_type] = record
+        return python_type
 
     @classmethod
-    def get_registered_type(cls, python_type: type) -> "TypeDef | None":
+    def get_registered_type(cls, python_type: type) -> TypeDef | None:
         """
         Get the registered TypeDef for a Python type.
 
@@ -199,23 +131,12 @@ class TypeDef:
             python_type: The Python type to look up
 
         Returns:
-            ExternalType or CustomType instance for this type, or None if not registered
+            ExternalType instance for this type, or None if not registered
         """
-        # Check external types first
         if python_type in cls._external_types:
             record = cls._external_types[python_type]
-            # Import here to avoid circular dependency
             # ExternalType is defined below in this same file
-            return ExternalType(
-                module=record.module, name=record.name, tag=record.tag
-            )
-
-        # Check custom types
-        if python_type in cls._custom_types:
-            record = cls._custom_types[python_type]
-            # Import here to avoid circular dependency
-            # CustomType is defined below in this same file
-            return CustomType(tag=record.tag)
+            return ExternalType(module=record.module, name=record.name)
 
         return None
 
@@ -388,32 +309,15 @@ class ExternalType(TypeDef, tag="external"):
     Reference to an externally registered type.
 
     Used for third-party types like pandas.DataFrame, polars.DataFrame, etc.
-    Stores module and name to avoid collisions between different libraries.
+    Stores module and name to uniquely identify types across different libraries.
 
     Examples:
-        pd.DataFrame → ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
-        pl.DataFrame → ExternalType(module="polars.dataframe.frame", name="DataFrame", tag="pl_dataframe")
+        pd.DataFrame → ExternalType(module="pandas.core.frame", name="DataFrame")
+        pl.DataFrame → ExternalType(module="polars.dataframe.frame", name="DataFrame")
     """
 
     module: str  # Full module path
-    name: str    # Class name
-    tag: str     # User-supplied tag
-
-
-class CustomType(TypeDef, tag="custom"):
-    """
-    Reference to a user-defined custom type.
-
-    Used for types registered with the decorator style, where encode/decode
-    are methods on the class itself.
-
-    Example:
-        @TypeDef.register(tag="point")
-        class Point: ...
-        → CustomType(tag="point")
-    """
-
-    tag: str
+    name: str  # Class name
 
 
 # =============================================================================
