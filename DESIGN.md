@@ -1,6 +1,6 @@
 # DSL Node Type System Design
 
-**Target Python Version:** 3.12+
+**Target Python Version:** 3.12+ with `from __future__ import annotations`
 
 ## Overview
 
@@ -26,7 +26,7 @@ Types = Python built-ins + User-registered types
 
 ```python
 class Add(Node[int]):         # produces int
-class Filter(Node[list[T]]):  # produces list[T]
+class Filter[T](Node[list[T]]):  # produces list[T]
 class Query(Node[DataFrame]): # produces DataFrame
 ```
 
@@ -99,7 +99,7 @@ x_node = ast.resolve(Ref(id="x"))  # Returns: Literal(5.0)
 Python built-ins are always available. No registration required:
 
 - **Primitives**: `int`, `float`, `str`, `bool`, `None`
-- **Containers**: `list[T]`, `dict[K, V]`, `set[T]`, `tuple[T, ...]`
+- **Containers**: `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B, C]` (fixed-length, heterogeneous)
 - **Unions**: `T | U`
 - **Literals**: `Literal["a", "b", "c"]` (enumerations)
 
@@ -129,26 +129,53 @@ Types require registration **only if** they need to be serialized as embedded va
 
 **Two registration approaches:**
 
-#### 1. Function Registration (for existing classes)
+#### 1. Function Registration (for external types)
 
-Use for types you don't control (e.g., pandas, numpy):
+Use for types you don't control (e.g., pandas, polars, numpy). Creates an `ExternalType` schema entry:
 
 ```python
-# Encode: takes instance, returns dict
-# Decode: takes dict, returns instance
+from typing import overload
+
+@overload
+def register[T](
+    python_type: type[T],
+    *,
+    tag: str | None = None,
+    encode: Callable[[T], dict],
+    decode: Callable[[dict], T],
+) -> type[T]: ...
+
+# Example usage
 TypeDef.register(
     pd.DataFrame,
     tag="dataframe",
     encode=lambda df: {"data": df.to_dict()},
     decode=lambda d: pd.DataFrame(d["data"]),
 )
+
+# Creates ExternalType schema:
+# ExternalType(module="pandas.core.frame", name="DataFrame", tag="dataframe")
 ```
 
-#### 2. Decorator Registration (for your own classes)
+**Key points:**
+- Stores module path (e.g., `pandas.core.frame`) and class name to avoid collisions
+- `encode` takes instance of type `T`, returns dict
+- `decode` takes dict, returns instance of type `T`
+- Returns the original type unchanged for chaining
 
-Use for types you define:
+#### 2. Decorator Registration (for custom types)
+
+Use for types you define. Creates a `CustomType` schema entry:
 
 ```python
+@overload
+def register[T](
+    python_type: None = None,
+    *,
+    tag: str | None = None,
+) -> Callable[[type[T]], type[T]]: ...
+
+# Example usage
 @TypeDef.register(tag="point")
 class Point:
     """A 2D point."""
@@ -163,85 +190,108 @@ class Point:
     def decode(cls, data: dict) -> Self:
         """Construct from dict representation."""
         return cls(x=data["x"], y=data["y"])
+
+# Creates CustomType schema:
+# CustomType(tag="point")
 ```
 
-The decorated class must have:
-- `encode(self) -> dict` method
-- `decode(cls, data: dict) -> Self` classmethod
+**Key points:**
+- Class must have `encode(self) -> dict` method
+- Class must have `decode(cls, data: dict) -> Self` classmethod
+- Returns the original class unchanged
+- No module/name needed - identified by user-supplied tag
+
+#### 3. Direct TypeDef Subclass (for schema types)
+
+Users can directly subclass TypeDef to create schema types, just like the built-in schema types:
+
+```python
+class MySpecialType(TypeDef, tag="myspecial"):
+    """User-defined schema type."""
+    custom_field: str
+    value: int
+
+# Automatically becomes frozen dataclass and registers
+# Treated exactly like IntType, FloatType, etc.
+```
 
 ### Type Registration API
 
 ```python
-class TypeDef:
-    # Storage for registered types
-    _registry: ClassVar[dict[str, 'RegisteredType']] = {}
+from typing import overload
 
+class TypeDef:
+    # Storage for external and custom types
+    _external_types: ClassVar[dict[type, ExternalTypeRecord]] = {}
+    _custom_types: ClassVar[dict[type, CustomTypeRecord]] = {}
+
+    @overload
     @classmethod
-    def register(
+    def register[T](
         cls,
-        python_type: type | None = None,
+        python_type: type[T],
         *,
         tag: str | None = None,
-        encode: Callable[[Any], dict] | None = None,
-        decode: Callable[[dict], Any] | None = None,
-    ) -> type | Any:
+        encode: Callable[[T], dict],
+        decode: Callable[[dict], T],
+    ) -> type[T]: ...
+
+    @overload
+    @classmethod
+    def register[T](
+        cls,
+        python_type: None = None,
+        *,
+        tag: str | None = None,
+    ) -> Callable[[type[T]], type[T]]: ...
+
+    @classmethod
+    def register[T](
+        cls,
+        python_type: type[T] | None = None,
+        *,
+        tag: str | None = None,
+        encode: Callable[[T], dict] | None = None,
+        decode: Callable[[dict], T] | None = None,
+    ) -> type[T] | Callable[[type[T]], type[T]]:
         """
-        Register a custom type with the type system.
+        Register a type with the type system.
 
-        Args:
-            python_type: The Python class to register
-            tag: Identifier for serialization (defaults to lowercase class name)
-            encode: Function to serialize instance to dict
-            decode: Function to deserialize from dict to instance
-
-        For function registration:
-            - encode takes instance, returns dict
-            - decode takes dict, returns instance
-
-        For decorator registration:
-            - Class must have encode(self) -> dict method
-            - Class must have decode(cls, data: dict) -> Self classmethod
-
-        Examples:
-            # Function registration (external types)
+        Function registration (external types):
             TypeDef.register(
                 pd.DataFrame,
                 tag="dataframe",
                 encode=lambda df: {"data": df.to_dict()},
                 decode=lambda d: pd.DataFrame(d["data"])
             )
+            Creates ExternalType(module="pandas.core.frame", name="DataFrame", tag="dataframe")
 
-            # Decorator registration (your types)
+        Decorator registration (custom types):
             @TypeDef.register(tag="point")
             class Point:
-                x: float
-                y: float
-
-                def encode(self) -> dict:
-                    return {"x": self.x, "y": self.y}
-
+                def encode(self) -> dict: ...
                 @classmethod
-                def decode(cls, data: dict) -> Self:
-                    return cls(x=data["x"], y=data["y"])
+                def decode(cls, data: dict) -> Self: ...
+            Creates CustomType(tag="point")
         """
         ...
 
-    @classmethod
-    def get_registered_type(cls, python_type: type) -> 'RegisteredType' | None:
-        """Get registration info for a Python type."""
-        ...
-```
-
-**Implementation Note**: Instead of dynamically creating TypeDef subclasses, the system stores a `RegisteredType` record:
-
-```python
 @dataclass(frozen=True)
-class RegisteredType:
-    """Record of a registered custom type."""
+class ExternalTypeRecord:
+    """Record for external type registration (function style)."""
     python_type: type
+    module: str  # Full module path, e.g., "pandas.core.frame"
+    name: str    # Class name, e.g., "DataFrame"
     tag: str
     encode: Callable[[Any], dict]
     decode: Callable[[dict], Any]
+
+@dataclass(frozen=True)
+class CustomTypeRecord:
+    """Record for custom type registration (decorator style)."""
+    python_type: type
+    tag: str
+    # encode/decode are methods on the class, not stored here
 ```
 
 ---
@@ -325,50 +375,57 @@ type NodeRef[T] = Ref[Node[T]]
 type Child[T] = Node[T] | Ref[Node[T]]
 ```
 
-**Purpose:**
-- `NodeRef[T]`: Explicitly represents a reference to a node
-- `Child[T]`: Convenient union type for inline nodes or references
-
-### Field Types
-
-| Annotation | Meaning | Serialization |
-|------------|---------|---------------|
-| `Node[T]` | Actual nested child node | Inline: full node serialized |
-| `Ref[Node[T]]` | Reference to a node | Reference: `{"$ref": "node-id"}` |
-| `Node[T] \| Ref[Node[T]]` | Either inline or reference | Depends on value |
-| `list[Node[T]]` | Multiple children | List of inline nodes |
-| `T` (registered type) | Embedded value | Uses type's encode function |
-
 ---
 
 ## TypeDef Schema Types
 
 TypeDef dataclasses represent type schemas. These are the canonical representation - dict/JSON forms are derived from them.
 
+### TypeDef Base Class
+
+Like Node, TypeDef uses `__init_subclass__` to automatically convert subclasses to dataclasses:
+
+```python
+@dataclass_transform(frozen_default=True)
+class TypeDef:
+    _tag: ClassVar[str]
+    _registry: ClassVar[dict[str, type[TypeDef]]] = {}
+
+    def __init_subclass__(cls, tag: str | None = None):
+        dataclass(frozen=True)(cls)
+
+        cls._tag = tag or cls.__name__.lower().removesuffix("type")
+
+        if existing := TypeDef._registry.get(cls._tag):
+            if existing is not cls:
+                raise TagCollisionError(
+                    f"Tag '{cls._tag}' already registered to {existing}."
+                )
+
+        TypeDef._registry[cls._tag] = cls
+```
+
+**No need for `@dataclass` decorator on subclasses!** Just like Node, subclassing automatically makes it a frozen dataclass.
+
 ### Primitive Types
 
 ```python
-@dataclass(frozen=True)
 class IntType(TypeDef, tag="int"):
     """Integer type."""
     pass
 
-@dataclass(frozen=True)
 class FloatType(TypeDef, tag="float"):
     """Floating point type."""
     pass
 
-@dataclass(frozen=True)
 class StrType(TypeDef, tag="str"):
     """String type."""
     pass
 
-@dataclass(frozen=True)
 class BoolType(TypeDef, tag="bool"):
     """Boolean type."""
     pass
 
-@dataclass(frozen=True)
 class NoneType(TypeDef, tag="none"):
     """None/null type."""
     pass
@@ -377,38 +434,47 @@ class NoneType(TypeDef, tag="none"):
 ### Container Types
 
 ```python
-@dataclass(frozen=True)
 class ListType(TypeDef, tag="list"):
-    """List type with element type."""
+    """Homogeneous list type."""
     element: TypeDef
 
-@dataclass(frozen=True)
 class DictType(TypeDef, tag="dict"):
     """Dictionary type with key and value types."""
     key: TypeDef
     value: TypeDef
 
-@dataclass(frozen=True)
 class SetType(TypeDef, tag="set"):
     """Set type with element type."""
     element: TypeDef
 
-@dataclass(frozen=True)
 class TupleType(TypeDef, tag="tuple"):
-    """Tuple type with fixed element types."""
+    """
+    Fixed-length heterogeneous tuple type.
+
+    Unlike list (homogeneous), tuple types have:
+    - Fixed length (known at schema time)
+    - Heterogeneous element types (each position can have different type)
+
+    Examples:
+        tuple[int, str, float] → TupleType(elements=(IntType(), StrType(), FloatType()))
+        tuple[str, str, str] → TupleType(elements=(StrType(), StrType(), StrType()))
+    """
     elements: tuple[TypeDef, ...]
 ```
 
 ### Literal/Enumeration Type
 
 ```python
-@dataclass(frozen=True)
 class LiteralType(TypeDef, tag="literal"):
     """
     Literal type representing enumeration of values.
 
     Maps Python's Literal[...] type to enumeration schema.
-    Example: Literal["red", "green", "blue"] → LiteralType(values=("red", "green", "blue"))
+
+    Examples:
+        Literal["red", "green", "blue"] → LiteralType(values=("red", "green", "blue"))
+        Literal[1, 2, 3] → LiteralType(values=(1, 2, 3))
+        Literal[True, False] → LiteralType(values=(True, False))
 
     Note: Does not support Python enum.Enum at this stage.
     """
@@ -418,40 +484,84 @@ class LiteralType(TypeDef, tag="literal"):
 ### Domain Types
 
 ```python
-@dataclass(frozen=True)
 class NodeType(TypeDef, tag="node"):
     """AST Node type with return type."""
     returns: TypeDef
 
-@dataclass(frozen=True)
 class RefType(TypeDef, tag="ref"):
     """Reference type pointing to another type."""
     target: TypeDef
 
-@dataclass(frozen=True)
 class UnionType(TypeDef, tag="union"):
     """Union of multiple types."""
     options: tuple[TypeDef, ...]
+```
 
-@dataclass(frozen=True)
-class TypeParameter(TypeDef, tag="param"):
+### Type Variables and References
+
+```python
+class TypeVar(TypeDef, tag="typevar"):
     """
-    Type parameter in PEP 695 generic definitions.
+    Type variable declaration in PEP 695 generic definitions.
 
-    Example: class Foo[T: int | float] → TypeParameter(name="T", bound=UnionType(...))
+    Represents the DECLARATION of a type variable (e.g., in class Foo[T]).
+
+    Examples:
+        class Foo[T]: ... → TypeVar(name="T", bound=None)
+        class Foo[T: int | float]: ... → TypeVar(name="T", bound=UnionType(...))
+
+    This is the definition site of the type parameter.
     """
     name: str
     bound: TypeDef | None = None
+
+class TypeVarRef(TypeDef, tag="typevarref"):
+    """
+    Reference to a type variable within a type expression.
+
+    Represents a USE of a type variable (e.g., in field: T).
+
+    Examples:
+        In class Foo[T]:
+            field: T → TypeVarRef(name="T")
+            field: list[T] → ListType(element=TypeVarRef(name="T"))
+
+    This is the use site that refers back to the TypeVar declaration.
+    """
+    name: str
 ```
 
-### Registered Custom Types
+### External and Custom Types
 
 ```python
-@dataclass(frozen=True)
+class ExternalType(TypeDef, tag="external"):
+    """
+    Reference to an externally registered type.
+
+    Used for types registered via function (e.g., pandas DataFrame, polars DataFrame).
+    Stores module and name to avoid collisions between different libraries.
+
+    Examples:
+        pd.DataFrame → ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
+        pl.DataFrame → ExternalType(module="polars.dataframe.frame", name="DataFrame", tag="pl_dataframe")
+    """
+    module: str  # Full module path
+    name: str    # Class name
+    tag: str     # User-supplied tag
+
 class CustomType(TypeDef, tag="custom"):
-    """Reference to a user-registered type."""
-    type_tag: str  # The tag used when registering
-    python_type: type  # The actual Python type
+    """
+    Reference to a user-defined custom type.
+
+    Used for types registered via decorator.
+    Identified solely by user-supplied tag.
+
+    Example:
+        @TypeDef.register(tag="point")
+        class Point: ...
+        → CustomType(tag="point")
+    """
+    tag: str
 ```
 
 ---
@@ -463,31 +573,17 @@ All schemas are **dataclasses**. They are the canonical representation. Serializ
 ### Node Schema
 
 ```python
-@dataclass(frozen=True)
 class NodeSchema:
     """Complete schema for a node class."""
     tag: str
-    type_params: tuple[TypeVarDef, ...]  # Type parameters from class[T, U, ...]
+    type_params: tuple[TypeVar, ...]  # Type variable declarations
     returns: TypeDef
     fields: tuple[FieldSchema, ...]
 
-@dataclass(frozen=True)
 class FieldSchema:
     """Schema for a node field."""
     name: str
     type: TypeDef
-
-@dataclass(frozen=True)
-class TypeVarDef:
-    """
-    Type variable definition from PEP 695 syntax.
-
-    Example:
-        class Foo[T]: ... → TypeVarDef(name="T", bound=None)
-        class Foo[T: int | float]: ... → TypeVarDef(name="T", bound=UnionType(...))
-    """
-    name: str
-    bound: TypeDef | None = None
 ```
 
 ### Schema Conversion Functions
@@ -500,12 +596,14 @@ def extract_type(py_type: Any) -> TypeDef:
     Examples:
         extract_type(int) → IntType()
         extract_type(list[int]) → ListType(element=IntType())
+        extract_type(tuple[int, str]) → TupleType(elements=(IntType(), StrType()))
         extract_type(Literal["a", "b"]) → LiteralType(values=("a", "b"))
         extract_type(Node[float]) → NodeType(returns=FloatType())
+        extract_type(pd.DataFrame) → ExternalType(module="...", name="DataFrame", tag="...")
     """
     ...
 
-def node_schema(cls: type[Node]) -> NodeSchema:
+def node_schema[N: Node](cls: type[N]) -> NodeSchema:
     """
     Extract schema from a Node subclass.
 
@@ -535,7 +633,7 @@ SetType(element=StrType())
 # dict[str, int]
 DictType(key=StrType(), value=IntType())
 
-# tuple[int, str, float]
+# tuple[int, str, float] (fixed-length, heterogeneous)
 TupleType(elements=(IntType(), StrType(), FloatType()))
 
 # int | str
@@ -549,6 +647,12 @@ NodeType(returns=FloatType())
 
 # Ref[Node[int]]
 RefType(target=NodeType(returns=IntType()))
+
+# pd.DataFrame (externally registered)
+ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
+
+# Point (custom registered)
+CustomType(tag="point")
 ```
 
 **NodeSchema example:**
@@ -562,15 +666,15 @@ class Add[T: int | float](Node[T], tag="add"):
 NodeSchema(
     tag="add",
     type_params=(
-        TypeVarDef(
+        TypeVar(
             name="T",
             bound=UnionType(options=(IntType(), FloatType()))
         ),
     ),
-    returns=TypeParameter(name="T"),
+    returns=TypeVarRef(name="T"),
     fields=(
-        FieldSchema(name="left", type=NodeType(returns=TypeParameter(name="T"))),
-        FieldSchema(name="right", type=NodeType(returns=TypeParameter(name="T"))),
+        FieldSchema(name="left", type=NodeType(returns=TypeVarRef(name="T"))),
+        FieldSchema(name="right", type=NodeType(returns=TypeVarRef(name="T"))),
     )
 )
 ```
@@ -592,7 +696,7 @@ class FormatAdapter(ABC):
     """Base class for format-specific serialization."""
 
     @abstractmethod
-    def serialize_node(self, node: Node) -> Any:
+    def serialize_node[N: Node](self, node: N) -> Any:
         """Serialize a node instance."""
         ...
 
@@ -618,7 +722,7 @@ class FormatAdapter(ABC):
 class JSONAdapter(FormatAdapter):
     """JSON serialization adapter."""
 
-    def serialize_node(self, node: Node) -> dict:
+    def serialize_node[N: Node](self, node: N) -> dict:
         """Serialize node to dict."""
         return {
             "tag": type(node)._tag,
@@ -690,7 +794,17 @@ Ref(id="node-123")
 {"$ref": "node-123"}
 ```
 
-**Registered type serialization:**
+**External type serialization:**
+```python
+# Given pd.DataFrame registered as:
+# ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
+
+df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+# Serializes as:
+{"type": "pd_dataframe", "value": {"data": {"a": [1, 2], "b": [3, 4]}}}
+```
+
+**Custom type serialization:**
 ```python
 # Given:
 @TypeDef.register(tag="point")
@@ -730,7 +844,7 @@ class AST:
             raise NodeNotFoundError(f"Node '{ref.id}' not found in AST")
         return self.nodes[ref.id]
 
-    def serialize(self, adapter: FormatAdapter) -> Any:
+    def serialize[A: FormatAdapter](self, adapter: A) -> Any:
         """Serialize entire AST using given adapter."""
         return {
             "root": self.root,
@@ -741,7 +855,7 @@ class AST:
         }
 
     @classmethod
-    def deserialize(cls, data: Any, adapter: FormatAdapter) -> 'AST':
+    def deserialize[A: FormatAdapter](cls, data: Any, adapter: A) -> AST:
         """Deserialize AST using given adapter."""
         return cls(
             root=data["root"],
@@ -752,194 +866,61 @@ class AST:
         )
 ```
 
-**Responsibilities:**
-- Store all nodes in a flat dictionary keyed by ID
-- Provide reference resolution via `resolve()`
-- Maintain a single root entry point
-- Enable serialization of cyclic graphs and shared subexpressions
-
-**When to use AST container:**
-- Complex graphs with shared nodes
-- Cyclic references
-- Need to serialize/deserialize entire graph at once
-- Want explicit graph structure management
-
-**When to use inline nodes:**
-- Simple tree structures
-- No sharing or cycles
-- Direct, simple construction
-
----
-
-## Error Handling
-
-### Registration Errors
-
-#### Tag Collision
-```python
-class Add(Node[int], tag="add"):
-    pass
-
-class Add(Node[float], tag="add"):
-    pass
-# Raises: TagCollisionError("Tag 'add' already registered...")
-```
-
-**Solution**: Use different tag.
-
-#### Invalid Type Annotation
-```python
-class BadNode(Node[int]):
-    value: SomeUnknownType  # Cannot extract schema
-# Raises: InvalidTypeError("Cannot extract type from: SomeUnknownType")
-```
-
-**Solution**: Ensure all field types are either:
-- Built-in types
-- Registered custom types
-- Valid Node/Ref types
-
-### Serialization Errors
-
-#### Unregistered Embedded Type
-```python
-class UnregisteredClass:
-    pass
-
-class BadNode(Node[int]):
-    value: UnregisteredClass  # Not registered!
-
-node = BadNode(value=UnregisteredClass())
-adapter.serialize_node(node)  # Raises: UnregisteredTypeError
-```
-
-**Solution**: Register the type with `TypeDef.register()` or use it only in `Node[T]` position.
-
-#### Unknown Tag During Deserialization
-```python
-data = {"tag": "unknown", "value": 42}
-adapter.deserialize_node(data)  # Raises: UnknownTagError
-```
-
-**Solution**: Ensure all node classes are imported/registered before deserialization.
-
-### Reference Errors
-
-#### Node Not Found
-```python
-ast = AST(root="main", nodes={"main": ...})
-ast.resolve(Ref(id="missing"))  # Raises: NodeNotFoundError
-```
-
-**Solution**: Ensure all referenced nodes are present in the AST container.
-
 ---
 
 ## Examples
 
 ### Logic-Based AST Examples
 
-#### 1. Mathematical Expression Tree
+#### Mathematical Expression with Tuples
 
 ```python
-# Define nodes
 class Literal(Node[float], tag="literal"):
     value: float
+
+class Point3D(Node[tuple[float, float, float]], tag="point3d"):
+    """Fixed-length heterogeneous tuple."""
+    x: Node[float]
+    y: Node[float]
+    z: Node[float]
 
 class Add(Node[float], tag="add"):
     left: Node[float]
     right: Node[float]
 
-class Multiply(Node[float], tag="multiply"):
-    left: Node[float]
-    right: Node[float]
-
-# Build expression: (2 + 3) * 4
-expr = Multiply(
-    left=Add(left=Literal(2.0), right=Literal(3.0)),
-    right=Literal(4.0)
+# Build: point with computed coordinates
+point = Point3D(
+    x=Literal(1.0),
+    y=Add(left=Literal(2.0), right=Literal(3.0)),
+    z=Literal(4.0)
 )
 
-# Serialize
-adapter = JSONAdapter()
-data = adapter.serialize_node(expr)
-# Deserialize
-restored = adapter.deserialize_node(data)
+# Schema shows fixed-length tuple
+schema = node_schema(Point3D)
+# returns: TupleType(elements=(FloatType(), FloatType(), FloatType()))
 ```
 
-#### 2. Conditional Logic with Literal Types
+#### Conditional Logic with Literal Enumerations
 
 ```python
-class If[T](Node[T], tag="if"):
-    condition: Node[bool]
-    then_branch: Node[T]
-    else_branch: Node[T]
-
 class StringCase(Node[str], tag="string_case"):
     """Pattern match on string literals."""
     value: Node[str]
-    # Use Literal type for allowed cases
-    case: Literal["upper", "lower", "title"]
+    case: Literal["upper", "lower", "title"]  # Enumeration
 
-# Build: if condition then uppercase else lowercase
-conditional = If(
-    condition=some_bool_node,
-    then_branch=StringCase(value=text, case="upper"),
-    else_branch=StringCase(value=text, case="lower")
-)
-```
-
-#### 3. Generic Map/Filter
-
-```python
-class Map[E, R](Node[list[R]], tag="map"):
-    input: Node[list[E]]
-    func: Node[R]
-
-class Filter[T](Node[list[T]], tag="filter"):
-    input: Node[list[T]]
-    predicate: Node[bool]
-
-# Example: filter then map
-numbers = ListLiteral([1, 2, 3, 4, 5])
-evens = Filter(input=numbers, predicate=IsEven())
-doubled = Map(input=evens, func=Double())
+# Schema extraction
+schema = node_schema(StringCase)
+# field "case" has type: LiteralType(values=("upper", "lower", "title"))
 ```
 
 ### Data/Structural AST Examples
 
-#### 1. Document Structure (HTML-like)
+#### Configuration with Custom Types
 
 ```python
-class Element(Node['Element'], tag="element"):
-    tag_name: str
-    attributes: dict[str, str]
-    children: list[Node['Element'] | Node[str]]
-
-class TextNode(Node[str], tag="text"):
-    content: str
-
-# Build document: <div class="container"><p>Hello</p></div>
-doc = Element(
-    tag_name="div",
-    attributes={"class": "container"},
-    children=[
-        Element(
-            tag_name="p",
-            attributes={},
-            children=[TextNode(content="Hello")]
-        )
-    ]
-)
-```
-
-#### 2. Configuration with Registered Types
-
-```python
-# Register config value type
+# Custom type with encode/decode methods
 @TypeDef.register(tag="config_value")
 class ConfigValue:
-    """Configuration value with metadata."""
     value: Any
     source: str  # "default", "env", "file"
 
@@ -952,95 +933,39 @@ class ConfigValue:
 
 class Config(Node[dict], tag="config"):
     name: str
-    version: str
-    settings: dict[str, ConfigValue]  # Embedded registered type
+    settings: dict[str, ConfigValue]  # Embedded custom type
 
-# Build config
-config = Config(
-    name="MyApp",
-    version="1.0",
-    settings={
-        "timeout": ConfigValue(value=30, source="default"),
-        "api_key": ConfigValue(value="secret", source="env")
-    }
-)
+# Schema shows CustomType(tag="config_value")
 ```
 
-#### 3. Build System DAG
+#### Data Pipeline with External Types
 
 ```python
-class Task(Node[str], tag="task"):
-    name: str
-    command: str
-    dependencies: list[Ref[Node[str]]]  # References to other tasks
-    outputs: list[str]
-
-# Build DAG with AST container
-build_graph = AST(
-    root="deploy",
-    nodes={
-        "compile": Task(
-            name="compile",
-            command="gcc -c main.c",
-            dependencies=[],
-            outputs=["main.o"]
-        ),
-        "link": Task(
-            name="link",
-            command="gcc -o app main.o",
-            dependencies=[Ref(id="compile")],
-            outputs=["app"]
-        ),
-        "deploy": Task(
-            name="deploy",
-            command="./deploy.sh",
-            dependencies=[Ref(id="link")],
-            outputs=[]
-        )
-    }
+# External type registered with module/name to avoid collisions
+TypeDef.register(
+    pd.DataFrame,
+    tag="pd_dataframe",
+    encode=lambda df: {"data": df.to_dict()},
+    decode=lambda d: pd.DataFrame(d["data"])
 )
 
-# Traverse dependencies
-deploy_task = build_graph.resolve(Ref(id="deploy"))
-for dep_ref in deploy_task.dependencies:
-    dep_task = build_graph.resolve(dep_ref)
-    print(f"Deploy depends on: {dep_task.name}")
-```
+TypeDef.register(
+    pl.DataFrame,  # Polars DataFrame
+    tag="pl_dataframe",
+    encode=lambda df: {"data": df.to_dict()},
+    decode=lambda d: pl.DataFrame(d["data"])
+)
 
-#### 4. Data Pipeline with External Types
-
-```python
-# External type - no registration needed since not embedded as value
-class DataFrame:
-    """External DataFrame type."""
-    pass
-
-class DataSource(Node[DataFrame], tag="source"):
+# Both pandas and polars DataFrames can coexist
+class DataSource(Node[pd.DataFrame], tag="pd_source"):
     path: str
-    format: Literal["csv", "parquet", "json"]  # Use Literal for enums
 
-class Transform(Node[DataFrame], tag="transform"):
-    input: Ref[Node[DataFrame]]
-    operation: str
-    params: dict[str, Any]
+class PolarsSource(Node[pl.DataFrame], tag="pl_source"):
+    path: str
 
-# Build pipeline
-pipeline = AST(
-    root="output",
-    nodes={
-        "users": DataSource(path="users.csv", format="csv"),
-        "filtered": Transform(
-            input=Ref(id="users"),
-            operation="filter",
-            params={"condition": "age > 18"}
-        ),
-        "output": Transform(
-            input=Ref(id="filtered"),
-            operation="select",
-            params={"columns": ["name", "age"]}
-        )
-    }
-)
+# Schemas distinguish via module:
+# pd.DataFrame → ExternalType(module="pandas.core.frame", name="DataFrame", tag="pd_dataframe")
+# pl.DataFrame → ExternalType(module="polars.dataframe.frame", name="DataFrame", tag="pl_dataframe")
 ```
 
 ---
@@ -1048,25 +973,27 @@ pipeline = AST(
 ## Design Principles
 
 1. **Immutability**: All nodes and schemas are frozen dataclasses
-2. **Type Safety**: Leverage Python 3.12+ generics for compile-time type checking
-3. **Automatic Registration**: No manual registry management
+2. **Type Safety**: Leverage Python 3.12+ generics with proper type parameters
+3. **Automatic Dataclass Conversion**: Both Node and TypeDef auto-convert subclasses
 4. **Dataclass-First**: Schemas are dataclasses; serialization is secondary
 5. **Minimal Registration**: External types don't need registration unless serialized
 6. **Simple Tagging**: Just `tag`, no namespace or version complexity
 7. **Modern Python**: PEP 695 type parameters only (`class[T]` syntax)
-8. **Pluggable Serialization**: Format adapters handle all serialization
-9. **Two Registration Styles**: Function for external types, decorator for owned types
-10. **Reference Support**: First-class support for node references and graph structures
+8. **Generic Signatures**: encode/decode properly typed with type parameters
+9. **Module-based Collision Avoidance**: External types store module+name
+10. **Three Type Categories**: External (function registration), Custom (decorator registration), Direct (TypeDef subclass)
 
 ---
 
 ## Type Categories Summary
 
-| Category | Registration Required? | Can be Node[T] parameter? | Can be embedded value? | Example |
-|----------|------------------------|---------------------------|------------------------|---------|
-| Built-in types | No | Yes | Yes | `int`, `list[str]`, `Literal["a", "b"]` |
-| External types | No (unless embedded) | Yes | Only if registered | `DBConnection`, `DataFrame` |
-| Registered types | Yes (for embedding) | Yes | Yes | Registered `Point`, `ConfigValue` |
+| Category | How Defined | Schema Type | Registration Required? | Can Embed? |
+|----------|-------------|-------------|------------------------|------------|
+| Built-in | Python | IntType, ListType, etc. | No | Yes |
+| External (unregistered) | Third-party | Not in schema | No | No |
+| External (registered) | Function registration | ExternalType(module, name, tag) | For embedding | Yes |
+| Custom | Decorator registration | CustomType(tag) | For embedding | Yes |
+| Direct | TypeDef subclass | Own type | No | Yes |
 
 ---
 
@@ -1074,25 +1001,24 @@ pipeline = AST(
 
 ### Currently Implemented
 
-- ✅ Node base class with automatic registration
-- ✅ TypeDef base class with automatic registration
-- ✅ Namespace support (to be simplified to tag-only)
-- ✅ Generic node support with type parameters
+- ✅ Node base class with automatic dataclass conversion
+- ✅ TypeDef base class with registration
+- ✅ Namespace support (to be removed)
+- ✅ Generic node support
 - ✅ Type registration via `TypeDef.register()`
-- ✅ Schema extraction via `node_schema()` and `all_schemas()`
-- ✅ Serialization via `to_dict/from_dict/to_json/from_json` (to be replaced with adapters)
+- ✅ Schema extraction (returns dicts, needs dataclass returns)
 - ✅ AST container with reference resolution
 
 ### Needs Implementation
 
-- ⏳ **Simplify to tag-only**: Remove namespace and version from Node/TypeDef
-- ⏳ **RegisteredType record**: Replace dynamic TypeDef generation with simple record
-- ⏳ **Encode/decode in registration**: Support both function and method styles
-- ⏳ **LiteralType**: Add support for Python `Literal[...]` type
-- ⏳ **SetType and TupleType**: Add schema dataclasses for these containers
-- ⏳ **Dataclass schemas**: Return NodeSchema dataclasses instead of dicts
+- ⏳ **Auto-dataclass for TypeDef**: Add same `__init_subclass__` pattern as Node
+- ⏳ **ExternalType and CustomType**: Replace current registration with module-based approach
+- ⏳ **Generic register signatures**: Add proper `[T]` type parameters to encode/decode
+- ⏳ **TypeVar and TypeVarRef**: Rename TypeParameter for clarity
+- ⏳ **LiteralType**: Add support for Python `Literal[...]`
+- ⏳ **TupleType semantics**: Document fixed-length heterogeneous tuples
+- ⏳ **SetType**: Add schema dataclass
+- ⏳ **Dataclass schema returns**: Return NodeSchema instead of dict
 - ⏳ **Format adapters**: Implement JSONAdapter, YAMLAdapter, etc.
-- ⏳ **Remove legacy TypeVar**: Only support `class[T]` syntax
-- ⏳ **Error types**: Define specific exception classes
-- ⏳ **Node traversal utilities**: Add helpers for walking/transforming ASTs
-- ⏳ **Pretty printing and visualization**: Tools for displaying ASTs
+- ⏳ **Remove string type hints**: Audit and remove any stringified hints
+- ⏳ **Simplify to tag-only**: Remove namespace from Node/TypeDef
