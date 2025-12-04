@@ -1,7 +1,7 @@
 [project]
 name = "nanoDSL"
 version = "0.1.0"
-description = "Add your description here"
+description = "A type-safe node system for building ASTs and DSLs in Python 3.12+"
 readme = "README.md"
 authors = [
     { name = "Jim Lundin", email = "JimLundin@users.noreply.github.com" },
