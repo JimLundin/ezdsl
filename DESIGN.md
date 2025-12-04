@@ -1002,23 +1002,32 @@ class PolarsSource(Node[pl.DataFrame], tag="pl_source"):
 ### Currently Implemented
 
 - ✅ Node base class with automatic dataclass conversion
-- ✅ TypeDef base class with registration
+- ✅ TypeDef base class with automatic dataclass conversion
+- ✅ Tag validation with regex pattern (lowercase start, lowercase/digits/hyphens/underscores only)
 - ✅ Namespace support (to be removed)
-- ✅ Generic node support
+- ✅ Generic node support with type parameters
 - ✅ Type registration via `TypeDef.register()`
-- ✅ Schema extraction (returns dicts, needs dataclass returns)
+- ✅ Schema extraction (returns dicts)
 - ✅ AST container with reference resolution
+- ✅ JSONAdapter for serialization/deserialization
+- ✅ Comprehensive error handling with helpful error messages
+- ✅ Comprehensive test suite (215+ tests covering all core modules)
 
 ### Needs Implementation
 
-- ⏳ **Auto-dataclass for TypeDef**: Add same `__init_subclass__` pattern as Node
-- ⏳ **ExternalType and CustomType**: Replace current registration with module-based approach
-- ⏳ **Generic register signatures**: Add proper `[T]` type parameters to encode/decode
 - ⏳ **TypeVar and TypeVarRef**: Rename TypeParameter for clarity
 - ⏳ **LiteralType**: Add support for Python `Literal[...]`
 - ⏳ **TupleType semantics**: Document fixed-length heterogeneous tuples
 - ⏳ **SetType**: Add schema dataclass
 - ⏳ **Dataclass schema returns**: Return NodeSchema instead of dict
-- ⏳ **Format adapters**: Implement JSONAdapter, YAMLAdapter, etc.
+- ⏳ **Additional format adapters**: Implement YAMLAdapter, TOMLAdapter, etc.
 - ⏳ **Remove string type hints**: Audit and remove any stringified hints
 - ⏳ **Simplify to tag-only**: Remove namespace from Node/TypeDef
+
+### Future Features
+
+These features are intentionally excluded from the current implementation for simplicity, but may be added in future versions:
+
+- 🔮 **CustomType with decorator registration**: Support for `@nanodsl.register` decorator to register custom Python types
+- 🔮 **ExternalType with decorator-based registration**: Decorator approach for registering third-party types
+- 🔮 **Generic register signatures**: Type-safe `encode[T]` and `decode[T]` functions with decorators
