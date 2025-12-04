@@ -6,10 +6,11 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from nanodsl.nodes import Node
 from nanodsl.serialization import from_dict, to_dict
 
 if TYPE_CHECKING:
-    from nanodsl.nodes import Node, Ref
+    from nanodsl.nodes import Ref
 
 
 @dataclass
@@ -34,8 +35,8 @@ class AST:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AST:
-        nodes = {k: from_dict(v) for k, v in data["nodes"].items()}
-        return cls(data["root"], nodes)  # type: ignore[arg-type]
+        nodes = {k: cast(Node[Any], from_dict(v)) for k, v in data["nodes"].items()}
+        return cls(data["root"], nodes)
 
     @classmethod
     def from_json(cls, s: str) -> AST:
