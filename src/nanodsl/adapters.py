@@ -8,7 +8,7 @@ Node instances and schema dataclasses to/from different serialization formats.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import fields as dataclass_fields
+import dataclasses
 from typing import Any
 
 from nanodsl.nodes import Node, Ref
@@ -62,7 +62,7 @@ class JSONAdapter(FormatAdapter):
         """Serialize node to dict."""
         result = {"tag": type(node)._tag}
 
-        for field in dataclass_fields(node):
+        for field in dataclasses.fields(node):
             if not field.name.startswith("_"):
                 value = getattr(node, field.name)
                 result[field.name] = self._serialize_value(value)
@@ -84,7 +84,7 @@ class JSONAdapter(FormatAdapter):
 
         # Deserialize fields
         field_values = {}
-        for field in dataclass_fields(node_cls):
+        for field in dataclasses.fields(node_cls):
             if not field.name.startswith("_") and field.name in data:
                 field_values[field.name] = self._deserialize_value(data[field.name])
 
@@ -101,7 +101,7 @@ class JSONAdapter(FormatAdapter):
 
         # Deserialize fields
         field_values = {}
-        for field in dataclass_fields(typedef_cls):
+        for field in dataclasses.fields(typedef_cls):
             if not field.name.startswith("_") and field.name in data:
                 field_values[field.name] = self._deserialize_value(data[field.name])
 
@@ -111,7 +111,7 @@ class JSONAdapter(FormatAdapter):
         """Serialize TypeDef to dict."""
         result = {"tag": type(typedef)._tag}
 
-        for field in dataclass_fields(typedef):
+        for field in dataclasses.fields(typedef):
             if not field.name.startswith("_"):
                 value = getattr(typedef, field.name)
                 result[field.name] = self._serialize_value(value)
