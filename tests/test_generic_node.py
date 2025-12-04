@@ -4,16 +4,15 @@ from typing import TypeVar
 
 from nanodsl.schema import extract_type
 from nanodsl.types import (
-    ListType,
     DictType,
     IntType,
+    ListType,
     StrType,
-    FloatType,
     TypeParameter,
 )
 
 
-def test_type_parameter_in_annotation():
+def test_type_parameter_in_annotation() -> None:
     """Test extracting a type annotation that uses a type parameter."""
     # Simulate: class MyNode[T]:
     #               args: list[T]
@@ -29,7 +28,7 @@ def test_type_parameter_in_annotation():
     assert result.element.name == "T"
 
 
-def test_nested_type_parameters():
+def test_nested_type_parameters() -> None:
     """Test extracting nested parameterized types with type parameters."""
     # Simulate: class MyNode[T]:
     #               args: list[dict[str, T]]
@@ -52,7 +51,7 @@ def test_nested_type_parameters():
     assert dict_type.value.name == "T"
 
 
-def test_bounded_type_parameter_in_annotation():
+def test_bounded_type_parameter_in_annotation() -> None:
     """Test extracting type annotations with bounded type parameters."""
     # Simulate: class MyNode[T: int]:
     #               value: T
@@ -66,7 +65,7 @@ def test_bounded_type_parameter_in_annotation():
     assert isinstance(result.bound, IntType)
 
 
-def test_multiple_type_parameters():
+def test_multiple_type_parameters() -> None:
     """Test multiple type parameters in one annotation."""
     # Simulate: class MyNode[K, V]:
     #               data: dict[K, V]

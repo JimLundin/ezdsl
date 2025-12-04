@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import types
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import dataclass_transform, get_args, get_origin, Any, ClassVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    dataclass_transform,
+    get_args,
+    get_origin,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -19,6 +28,7 @@ class ExternalTypeRecord[T]:
     decode: Callable[[dict[str, Any]], T]
 
 
+@dataclass(frozen=True)
 @dataclass_transform(frozen_default=True)
 class TypeDef:
     """Base for type definitions."""
@@ -33,10 +43,11 @@ class TypeDef:
 
         if existing := TypeDef.registry.get(cls._tag):
             if existing is not cls:
-                raise ValueError(
+                msg = (
                     f"Tag '{cls._tag}' already registered to {existing}. "
-                    f"Choose a different tag."
+                    "Choose a different tag."
                 )
+                raise ValueError(msg)
 
         TypeDef.registry[cls._tag] = cls
 
@@ -57,10 +68,11 @@ class TypeDef:
             # Idempotent if same module/name
             if existing.module == module and existing.name == name:
                 return python_type
-            raise ValueError(
+            msg = (
                 f"Type {python_type} already registered as "
                 f"{existing.module}.{existing.name}"
             )
+            raise ValueError(msg)
 
         # Create and store record
         record = ExternalTypeRecord(
@@ -103,50 +115,50 @@ class NoneType(TypeDef, tag="none"):
 
 
 class ListType(TypeDef, tag="list"):
-    """List type: list[int] → ListType(element=IntType())"""
+    """List type: list[int] → ListType(element=IntType())."""
 
     element: TypeDef
 
 
 class DictType(TypeDef, tag="dict"):
-    """Dict type: dict[str, int] → DictType(key=StrType(), value=IntType())"""
+    """Dict type: dict[str, int] → DictType(key=StrType(), value=IntType())."""
 
     key: TypeDef
     value: TypeDef
 
 
 class SetType(TypeDef, tag="set"):
-    """Set type: set[int] → SetType(element=IntType())"""
+    """Set type: set[int] → SetType(element=IntType())."""
 
     element: TypeDef
 
 
 class TupleType(TypeDef, tag="tuple"):
-    """Fixed-length heterogeneous tuple: tuple[int, str] → TupleType(elements=(...))"""
+    """Fixed-length heterogeneous tuple: tuple[int, str] → TupleType(elements=(...))."""
 
     elements: tuple[TypeDef, ...]
 
 
 class LiteralType(TypeDef, tag="literal"):
-    """Literal enumeration: Literal["a", "b"] → LiteralType(values=("a", "b"))"""
+    """Literal enumeration: Literal["a", "b"] → LiteralType(values=("a", "b"))."""
 
     values: tuple[str | int | bool, ...]
 
 
 class NodeType(TypeDef, tag="node"):
-    """Node type: Node[float] → NodeType(returns=FloatType())"""
+    """Node type: Node[float] → NodeType(returns=FloatType())."""
 
     returns: TypeDef
 
 
 class RefType(TypeDef, tag="ref"):
-    """Reference type: Ref[Node[int]] → RefType(target=NodeType(...))"""
+    """Reference type: Ref[Node[int]] → RefType(target=NodeType(...))."""
 
     target: TypeDef
 
 
 class UnionType(TypeDef, tag="union"):
-    """Union type: int | str → UnionType(options=(IntType(), StrType()))"""
+    """Union type: int | str → UnionType(options=(IntType(), StrType()))."""
 
     options: tuple[TypeDef, ...]
 

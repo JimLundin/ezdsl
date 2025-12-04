@@ -4,20 +4,17 @@ from typing import TypeVar
 
 from nanodsl.schema import extract_type
 from nanodsl.types import (
-    ListType,
     DictType,
-    IntType,
-    StrType,
     FloatType,
-    NodeType,
-    RefType,
+    IntType,
+    ListType,
+    StrType,
     TypeParameter,
 )
 
 
-def test_generic_node_field_extraction():
-    """
-    Test how a generic Node's fields are extracted.
+def test_generic_node_field_extraction() -> None:
+    """Test how a generic Node's fields are extracted.
 
     Example: class Container[T]:
                  items: list[T]
@@ -25,7 +22,6 @@ def test_generic_node_field_extraction():
     When we extract the type of 'items', T should be a TypeVar,
     not a concrete type.
     """
-
     # In practice, you'd define it like:
     # class Container[T](Node[list[T]], tag="container"):
     #     items: list[T]
@@ -43,9 +39,8 @@ def test_generic_node_field_extraction():
     assert items_type.element.name == "T"
 
 
-def test_complex_generic_node_field():
-    """
-    Test: class MyNode[T]:
+def test_complex_generic_node_field() -> None:
+    """Test: class MyNode[T]:
               args: list[dict[str, T]]
 
     This should serialize as:
@@ -75,9 +70,8 @@ def test_complex_generic_node_field():
     assert dict_type.value.bound is None
 
 
-def test_bounded_type_parameter_in_generic_node():
-    """
-    Test: class NumericNode[T: float]:
+def test_bounded_type_parameter_in_generic_node() -> None:
+    """Test: class NumericNode[T: float]:
               value: T
 
     The TypeVar should capture the bound.
@@ -92,11 +86,10 @@ def test_bounded_type_parameter_in_generic_node():
     assert isinstance(result.bound, FloatType)
 
 
-def test_type_parameter_vs_concrete_type():
-    """
-    Demonstrate the difference between:
+def test_type_parameter_vs_concrete_type() -> None:
+    """Demonstrate the difference between:
     1. A type parameter (T in class definition)
-    2. A concrete type argument (int when using the class)
+    2. A concrete type argument (int when using the class).
     """
     T = TypeVar("T")
 

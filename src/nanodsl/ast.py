@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
-from nanodsl.nodes import Node, Ref
-from nanodsl.serialization import to_dict, from_dict
+from nanodsl.serialization import from_dict, to_dict
+
+if TYPE_CHECKING:
+    from nanodsl.nodes import Node, Ref
 
 
 @dataclass
@@ -19,7 +21,7 @@ class AST:
 
     def resolve[X](self, ref: Ref[X]) -> X:
         """Resolve a reference to its node."""
-        return self.nodes[ref.id]
+        return cast(X, self.nodes[ref.id])
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -32,7 +34,8 @@ class AST:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AST:
-        return cls(data["root"], {k: from_dict(v) for k, v in data["nodes"].items()})
+        nodes = {k: cast(Node[Any], from_dict(v)) for k, v in data["nodes"].items()}
+        return cls(data["root"], nodes)
 
     @classmethod
     def from_json(cls, s: str) -> AST:

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import fields
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from nanodsl.nodes import Node, Ref
 from nanodsl.types import TypeDef
-from nanodsl.schema import NodeSchema
+
+if TYPE_CHECKING:
+    from nanodsl.schema import NodeSchema
 
 
 class SerializedFieldSchema(TypedDict):
@@ -60,12 +62,10 @@ class JSONAdapter(FormatAdapter):
 
     def deserialize_node(self, data: dict[str, Any]) -> Node[Any]:
         tag = data["tag"]
-        if tag == "ref":
-            return Ref(id=data["id"])
-
         node_cls = Node.registry.get(tag)
         if node_cls is None:
-            raise ValueError(f"Unknown node tag: {tag}")
+            msg = f"Unknown node tag: {tag}"
+            raise ValueError(msg)
 
         field_values = {
             field.name: self._deserialize_value(data[field.name])
@@ -78,7 +78,8 @@ class JSONAdapter(FormatAdapter):
         tag = data["tag"]
         typedef_cls = TypeDef.registry.get(tag)
         if typedef_cls is None:
-            raise ValueError(f"Unknown TypeDef tag: {tag}")
+            msg = f"Unknown TypeDef tag: {tag}"
+            raise ValueError(msg)
 
         field_values = {
             field.name: self._deserialize_value(data[field.name])
@@ -129,7 +130,8 @@ class JSONAdapter(FormatAdapter):
                 return self.deserialize_node(value)
             if tag in TypeDef.registry:
                 return self.deserialize_typedef(value)
-            raise ValueError(f"Unknown tag: {tag}")
+            msg = f"Unknown tag: {tag}"
+            raise ValueError(msg)
         if isinstance(value, list):
             return [self._deserialize_value(item) for item in value]
         if isinstance(value, dict):

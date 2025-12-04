@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import dataclass_transform, ClassVar, Any
+from typing import Any, ClassVar, dataclass_transform
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class Ref[X]:
     id: str
 
 
+@dataclass(frozen=True)
 @dataclass_transform(frozen_default=True)
 class Node[T]:
     """Base for AST nodes. T is return type."""
@@ -20,16 +21,17 @@ class Node[T]:
     _tag: ClassVar[str]
     registry: ClassVar[dict[str, type[Node[Any]]]] = {}
 
-    def __init_subclass__(cls, tag: str | None = None):
+    def __init_subclass__(cls, tag: str | None = None) -> None:
         dataclass(frozen=True)(cls)
         cls._tag = tag or cls.__name__.lower().removesuffix("node")
 
         if existing := Node.registry.get(cls._tag):
             if existing is not cls:
-                raise ValueError(
+                msg = (
                     f"Tag '{cls._tag}' already registered to {existing}. "
-                    f"Choose a different tag."
+                    "Choose a different tag."
                 )
+                raise ValueError(msg)
 
         Node.registry[cls._tag] = cls
 

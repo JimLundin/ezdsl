@@ -2,35 +2,35 @@
 
 from __future__ import annotations
 
+import types
 from dataclasses import dataclass, fields
 from typing import (
+    Any,
+    Literal,
+    TypeAliasType,
+    TypeVar,
     get_args,
     get_origin,
     get_type_hints,
-    Any,
-    TypeAliasType,
-    TypeVar,
-    Literal,
 )
-import types
 
 from nanodsl.nodes import Node, Ref
 from nanodsl.types import (
-    TypeDef,
-    IntType,
-    FloatType,
-    StrType,
     BoolType,
-    NoneType,
-    ListType,
     DictType,
-    SetType,
-    TupleType,
+    FloatType,
+    IntType,
+    ListType,
     LiteralType,
     NodeType,
+    NoneType,
     RefType,
-    UnionType,
+    SetType,
+    StrType,
+    TupleType,
+    TypeDef,
     TypeParameter,
+    UnionType,
     _substitute_type_params,
 )
 
@@ -73,11 +73,12 @@ def extract_type(py_type: Any) -> TypeDef:
     if isinstance(origin, TypeAliasType):
         type_params = getattr(origin, "__type_params__", ())
         if len(type_params) != len(args):
-            raise ValueError(
+            msg = (
                 f"Type alias {origin.__name__} expects {len(type_params)} "
                 f"arguments but got {len(args)}"
             )
-        substitutions = dict(zip(type_params, args))
+            raise ValueError(msg)
+        substitutions = dict(zip(type_params, args, strict=True))
         substituted = _substitute_type_params(origin.__value__, substitutions)
         return extract_type(substituted)
 
@@ -94,32 +95,36 @@ def extract_type(py_type: Any) -> TypeDef:
 
     if origin is list:
         if not args:
-            raise ValueError("list type must have an element type")
+            msg = "list type must have an element type"
+            raise ValueError(msg)
         return ListType(element=extract_type(args[0]))
 
     if origin is dict:
         if len(args) != 2:
-            raise ValueError("dict type must have key and value types")
+            msg = "dict type must have key and value types"
+            raise ValueError(msg)
         return DictType(key=extract_type(args[0]), value=extract_type(args[1]))
 
     if origin is set:
         if not args:
-            raise ValueError("set type must have an element type")
+            msg = "set type must have an element type"
+            raise ValueError(msg)
         return SetType(element=extract_type(args[0]))
 
     if origin is tuple:
         if not args:
-            raise ValueError("tuple type must have element types")
+            msg = "tuple type must have element types"
+            raise ValueError(msg)
         return TupleType(elements=tuple(extract_type(arg) for arg in args))
 
     if origin is Literal:
         if not args:
-            raise ValueError("Literal type must have values")
+            msg = "Literal type must have values"
+            raise ValueError(msg)
         for val in args:
             if not isinstance(val, (str, int, bool)):
-                raise ValueError(
-                    f"Literal values must be str, int, or bool, got {type(val)}"
-                )
+                msg = f"Literal values must be str, int, or bool, got {type(val)}"
+                raise TypeError(msg)
         return LiteralType(values=args)
 
     if origin is not None and isinstance(origin, type) and issubclass(origin, Node):
@@ -134,17 +139,17 @@ def extract_type(py_type: Any) -> TypeDef:
     if isinstance(py_type, types.UnionType):
         return UnionType(tuple(extract_type(a) for a in args))
 
-    raise ValueError(f"Cannot extract type from: {py_type}")
+    msg = f"Cannot extract type from: {py_type}"
+    raise ValueError(msg)
 
 
 def _extract_node_returns(cls: type[Node[Any]]) -> TypeDef:
     """Extract the return type from a Node class definition."""
     for base in getattr(cls, "__orig_bases__", ()):
-        origin = get_origin(base)
-        if origin is not None and isinstance(origin, type) and issubclass(origin, Node):
-            args = get_args(base)
-            if args:
-                return extract_type(args[0])
+        if origin := get_origin(base):
+            if isinstance(origin, type) and issubclass(origin, Node):
+                if args := get_args(base):
+                    return extract_type(args[0])
     return NoneType()
 
 

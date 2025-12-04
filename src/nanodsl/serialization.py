@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
 import json
+from typing import Any
 
+from nanodsl.adapters import JSONAdapter
 from nanodsl.nodes import Node, Ref
 from nanodsl.types import TypeDef
-from nanodsl.adapters import JSONAdapter
 
 _adapter = JSONAdapter()
 
@@ -20,7 +20,8 @@ def to_dict(obj: Node[Any] | Ref[Any] | TypeDef) -> dict[str, Any]:
         return _adapter.serialize_node(obj)
     if isinstance(obj, TypeDef):
         return _adapter.serialize_typedef(obj)
-    raise ValueError(f"Cannot serialize {type(obj)}")
+    msg = f"Cannot serialize {type(obj)}"
+    raise ValueError(msg)
 
 
 def from_dict(data: dict[str, Any]) -> Node[Any] | Ref[Any] | TypeDef:
@@ -32,7 +33,8 @@ def from_dict(data: dict[str, Any]) -> Node[Any] | Ref[Any] | TypeDef:
         return _adapter.deserialize_node(data)
     if tag in TypeDef.registry:
         return _adapter.deserialize_typedef(data)
-    raise ValueError(f"Unknown tag: {tag}")
+    msg = f"Unknown tag: {tag}"
+    raise ValueError(msg)
 
 
 def to_json(obj: Node[Any] | Ref[Any] | TypeDef) -> str:
