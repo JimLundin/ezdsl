@@ -223,23 +223,6 @@ if user_input.get("tag") not in allowed_tags:
 node = from_dict(user_input)
 ```
 
-### Tag Validation
-
-Node tags are automatically validated to ensure they:
-- Start with a lowercase letter
-- Contain only lowercase letters, digits, hyphens, and underscores
-
-```python
-# ✅ Valid tags
-class MyNode(Node[int], tag="my-node"):      # lowercase with hyphens
-class MyNode(Node[int], tag="node_123"):     # lowercase with underscores and digits
-
-# ❌ Invalid tags (will raise ValueError)
-class MyNode(Node[int], tag="MyNode"):       # uppercase
-class MyNode(Node[int], tag="123node"):      # starts with digit
-class MyNode(Node[int], tag="my node"):      # contains space
-```
-
 ### Best Practices
 
 1. **Validate input**: Always validate deserialized data before using it in your application
