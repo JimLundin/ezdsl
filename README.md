@@ -294,38 +294,35 @@ result = evaluate(expr, {"x": -5.0})
 print(result)  # 9.0 = abs(-5 + 2) * 3
 ```
 
-For more advanced patterns including the `Interpreter` base class and reference-based ASTs with `Ref`, see the [Tutorials](#tutorials) section below.
+## Learning typeDSL
 
-## Tutorials
+### Getting Started
 
-The `tutorial/` directory contains comprehensive, step-by-step guides:
+**[GETTING_STARTED.md](tutorial/GETTING_STARTED.md)** (15 min read)
 
-### Feature-by-Feature Tutorial
+An introduction to core concepts:
+- What nodes are and how they work
+- Using type parameters for polymorphism
+- Building interpreters with pattern matching
+- When to use references vs inline nodes
+- Serialization basics
 
-**[TUTORIAL.md](tutorial/TUTORIAL.md)** (~30 min) - Learn typeDSL progressively:
-- Your first node
-- Composing nodes
-- **Generic nodes with type parameters**
-- Interpreters and pattern matching
-- References and shared nodes
-- Serialization
+Focused on **understanding** with minimal examples (3 node types).
 
-### Problem-Based Tutorials
+### Type Parameters
 
-**[EXPRESSION_LANGUAGE.md](tutorial/EXPRESSION_LANGUAGE.md)** (~40 min) - Build a complete typed expression language:
-- Generic binary operations
-- Function definitions and closures
-- Type checking interpreter
-- Demonstrates type variance and polymorphism
+**[TYPE_PARAMETERS.md](tutorial/TYPE_PARAMETERS.md)** (10 min read)
 
-**[SQL_QUERY_BUILDER.md](tutorial/SQL_QUERY_BUILDER.md)** (~45 min) - Build a type-safe SQL query builder:
-- Type-safe comparisons with generics
-- Schema validation
-- SQL generation
-- Prevents SQL injection
-- Real-world concrete example
+Deep dive into generics:
+- Why type parameters matter
+- Type safety at construction time
+- Type constraints (`T: int | float`)
+- Multiple type parameters
+- Common patterns
 
-## Examples
+Shows the key differentiator of typeDSL.
+
+### Examples
 
 The `examples/` directory contains focused, educational examples:
 
