@@ -234,7 +234,7 @@ node = from_dict(user_input)
 ## Complete Example: Expression Evaluator
 
 ```python
-from typedsl import Node, to_json, from_json
+from typedsl import Node, Interpreter
 from typing import Literal
 
 # Define expression nodes
@@ -267,30 +267,30 @@ expr = BinOp(
     right=Const(value=3.0)
 )
 
-# Serialize
-json_str = to_json(expr)
+# Implement interpreter
+class Evaluator(Interpreter[dict[str, float], float]):
+    def eval(self, node: Node[float]) -> float:
+        match node:
+            case Const(value=v):
+                return v
+            case Var(name=n):
+                return self.ctx[n]
+            case BinOp(op="+", left=l, right=r):
+                return self.eval(l) + self.eval(r)
+            case BinOp(op="-", left=l, right=r):
+                return self.eval(l) - self.eval(r)
+            case BinOp(op="*", left=l, right=r):
+                return self.eval(l) * self.eval(r)
+            case BinOp(op="/", left=l, right=r):
+                return self.eval(l) / self.eval(r)
+            case UnaryOp(op="-", operand=o):
+                return -self.eval(o)
+            case UnaryOp(op="abs", operand=o):
+                return abs(self.eval(o))
 
-# Evaluate (example interpreter)
-def evaluate(node: Node[float], env: dict[str, float]) -> float:
-    match node:
-        case Const(value=v):
-            return v
-        case Var(name=n):
-            return env[n]
-        case BinOp(op="+", left=l, right=r):
-            return evaluate(l, env) + evaluate(r, env)
-        case BinOp(op="-", left=l, right=r):
-            return evaluate(l, env) - evaluate(r, env)
-        case BinOp(op="*", left=l, right=r):
-            return evaluate(l, env) * evaluate(r, env)
-        case BinOp(op="/", left=l, right=r):
-            return evaluate(l, env) / evaluate(r, env)
-        case UnaryOp(op="-", operand=o):
-            return -evaluate(o, env)
-        case UnaryOp(op="abs", operand=o):
-            return abs(evaluate(o, env))
-
-result = evaluate(expr, {"x": -5.0})
+# Evaluate
+evaluator = Evaluator(None, {"x": -5.0})
+result = evaluator.eval(expr)
 print(result)  # 9.0 = abs(-5 + 2) * 3
 ```
 
