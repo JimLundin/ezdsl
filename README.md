@@ -294,6 +294,45 @@ result = evaluate(expr, {"x": -5.0})
 print(result)  # 9.0 = abs(-5 + 2) * 3
 ```
 
+## Learning typeDSL
+
+### Getting Started
+
+**[GETTING_STARTED.md](tutorial/GETTING_STARTED.md)** (15 min read)
+
+An introduction to core concepts:
+- What nodes are and how they work
+- Using type parameters for polymorphism
+- Building interpreters with pattern matching
+- When to use references vs inline nodes
+- Serialization basics
+
+Focused on **understanding** with minimal examples (3 node types).
+
+### Type Parameters
+
+**[TYPE_PARAMETERS.md](tutorial/TYPE_PARAMETERS.md)** (10 min read)
+
+Deep dive into generics:
+- Why type parameters matter
+- Type safety at construction time
+- Type constraints (`T: int | float`)
+- Multiple type parameters
+- Common patterns
+
+Shows the key differentiator of typeDSL.
+
+### Examples
+
+The `examples/` directory contains focused, educational examples:
+
+| Example | Description | Lines |
+|---------|-------------|-------|
+| **[01_calculator.py](examples/01_calculator.py)** | Basic calculator DSL - node definition, `Interpreter` class, shared subexpressions | ~130 |
+| **[02_adapting_existing_ast.py](examples/02_adapting_existing_ast.py)** | Converting external ASTs (Python's `ast` module) to typeDSL | ~160 |
+
+See [examples/README.md](examples/README.md) for usage instructions and key patterns.
+
 ## API Reference
 
 ### Core Classes
