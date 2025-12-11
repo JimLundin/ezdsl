@@ -51,7 +51,7 @@ class TestNodeTags:
             value: int
 
         # 'node' suffix is removed, so MyTestNode -> mytest
-        assert MyTestNode._tag == "mytest"
+        assert MyTestNode.tag == "mytest"
 
     def test_automatic_tag_strips_node_suffix(self) -> None:
         """Test that 'node' suffix is removed from auto-generated tags."""
@@ -59,7 +59,7 @@ class TestNodeTags:
         class CalculatorNode(Node[float]):
             result: float
 
-        assert CalculatorNode._tag == "calculator"
+        assert CalculatorNode.tag == "calculator"
 
     def test_custom_tag(self) -> None:
         """Test explicitly setting a custom tag."""
@@ -67,7 +67,7 @@ class TestNodeTags:
         class MyNode(Node[int], tag="custom_tag"):
             value: int
 
-        assert MyNode._tag == "custom_tag"
+        assert MyNode.tag == "custom_tag"
 
     def test_tag_with_underscores(self) -> None:
         """Test custom tags with underscores."""
@@ -75,7 +75,7 @@ class TestNodeTags:
         class MyNode(Node[int], tag="my_custom_tag"):
             value: int
 
-        assert MyNode._tag == "my_custom_tag"
+        assert MyNode.tag == "my_custom_tag"
 
     def test_tag_with_hyphens(self) -> None:
         """Test custom tags with hyphens."""
@@ -83,7 +83,7 @@ class TestNodeTags:
         class MyNode(Node[int], tag="my-custom-tag"):
             value: int
 
-        assert MyNode._tag == "my-custom-tag"
+        assert MyNode.tag == "my-custom-tag"
 
     def test_tag_with_numbers(self) -> None:
         """Test tags with numbers."""
@@ -91,7 +91,7 @@ class TestNodeTags:
         class MyNode(Node[int], tag="node123"):
             value: int
 
-        assert MyNode._tag == "node123"
+        assert MyNode.tag == "node123"
 
 
 class TestNodeRegistry:

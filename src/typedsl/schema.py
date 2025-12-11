@@ -44,7 +44,7 @@ from typedsl.types import (
     TypeDef,
     TypeParameter,
     UnionType,
-    _substitute_type_params,
+    substitute_type_params,
 )
 
 # Unified type map: Python type/origin -> TypeDef class
@@ -123,7 +123,7 @@ def extract_type(py_type: Any) -> TypeDef:
             )
             raise ValueError(msg)
         substitutions = dict(zip(type_params, args, strict=True))
-        substituted = _substitute_type_params(origin.__value__, substitutions)
+        substituted = substitute_type_params(origin.__value__, substitutions)
         return extract_type(substituted)
 
     # Check unified type map (simple types use py_type, containers use origin)
@@ -209,7 +209,7 @@ def node_schema(cls: type[Node[Any]]) -> NodeSchema:
     )
 
     return NodeSchema(
-        tag=cls._tag,
+        tag=cls.tag,
         type_params=tuple(type_params),
         returns=_extract_node_returns(cls),
         fields=tuple(node_fields),

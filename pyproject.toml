@@ -21,10 +21,12 @@ strict = true
 
 [tool.pyright]
 typeCheckingMode = "strict"
-reportPrivateUsage = false
-reportUnknownArgumentType = false
-reportUnknownVariableType = false
-reportUnnecessaryIsInstance = false
+
+[[tool.pyright.executionEnvironments]]
+root = "src/typedsl"
+reportUnknownArgumentType = "warning"
+reportUnknownVariableType = "warning"
+reportUnnecessaryIsInstance = "warning"  # Defensive checks for invalid inputs are fine
 
 [tool.ruff]
 unsafe-fixes = true
@@ -33,23 +35,22 @@ unsafe-fixes = true
 fixable = ["ALL"]
 select = ["ALL"]
 ignore = [
-    "T201",    # print statements allowed
-    "D102",    # missing docstrings in public methods - too strict for this codebase
+    "D102",    # missing docstrings in public methods
     "D105",    # missing docstrings in magic methods
     "D203",    # incompatible with D211
     "D213",    # incompatible with D212
-    "ANN401",  # Any type allowed - needed for serialization
-    "SLF001",  # private member access allowed - _tag pattern is by design
-    "TC006",   # quotes in cast - style preference
-    "SIM102",  # nested if statements - valid style choice
-    "C901",    # function complexity - extract_type is intentionally complex
-    "PLR0911", # too many return statements - extract_type needs them
-    "PLR0912", # too many branches - extract_type needs them
-    "PLR2004", # magic values in comparisons - acceptable for error messages
     "COM812",  # trailing comma - conflicts with formatter
+    "TC006",   # quotes in cast - style preference
+    "SIM102",  # nested if - style preference, can be clearer
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# Type manipulation modules legitimately use Any
+"src/typedsl/types.py" = ["ANN401"]
+"src/typedsl/schema.py" = ["ANN401", "C901", "PLR0911", "PLR0912"]  # extract_type complexity is inherent
+"src/typedsl/adapters.py" = ["ANN401"]
+"src/typedsl/serialization.py" = ["PLR2004"]  # magic 10 in error message is fine
+
 "test_*.py" = [
     "S101",    # asserts allowed in tests
     "S102",    # exec allowed in tests
@@ -63,4 +64,6 @@ ignore = [
     "N806",    # variable naming relaxed in tests
     "PT011",   # pytest.raises match parameter not required
     "PGH003",  # type ignore specificity not required in tests
+    "SLF001",  # private member access allowed in tests
+    "ANN401",  # Any allowed in tests
 ]

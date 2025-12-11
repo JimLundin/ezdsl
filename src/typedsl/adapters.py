@@ -57,7 +57,7 @@ class JSONAdapter(FormatAdapter):
             for field in fields(node)
             if not field.name.startswith("_")
         }
-        result["tag"] = type(node)._tag
+        result["tag"] = type(node).tag
         return result
 
     def deserialize_node(self, data: dict[str, Any]) -> Node[Any]:
@@ -94,7 +94,7 @@ class JSONAdapter(FormatAdapter):
             for field in fields(typedef)
             if not field.name.startswith("_")
         }
-        result["tag"] = type(typedef)._tag
+        result["tag"] = type(typedef).tag
         return result
 
     def serialize_node_schema(self, schema: NodeSchema) -> SerializedNodeSchema:
