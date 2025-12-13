@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from typedsl.schema import NodeSchema
 
 
+class SerializedSignature(TypedDict):
+    """Serialized signature structure."""
+
+    args: list[Any]
+    kwargs: dict[str, Any]
+
+
 class SerializedFieldSchema(TypedDict):
     """Serialized field schema structure."""
 
@@ -24,6 +31,7 @@ class SerializedNodeSchema(TypedDict):
     """Serialized node schema structure."""
 
     tag: str
+    signature: SerializedSignature
     type_params: list[dict[str, Any]]
     returns: dict[str, Any]
     fields: list[SerializedFieldSchema]
@@ -100,6 +108,10 @@ class JSONAdapter(FormatAdapter):
     def serialize_node_schema(self, schema: NodeSchema) -> SerializedNodeSchema:
         return {
             "tag": schema.tag,
+            "signature": {
+                "args": list(schema.signature.args),
+                "kwargs": schema.signature.kwargs,
+            },
             "type_params": [self.serialize_typedef(tp) for tp in schema.type_params],
             "returns": self.serialize_typedef(schema.returns),
             "fields": [

@@ -14,16 +14,36 @@ class Ref[X]:
 
 
 @dataclass(frozen=True)
+class Signature:
+    """Node signature composed of positional and keyword arguments."""
+
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]  # Preserves insertion order (Python 3.7+)
+
+    def compose(self, delimiter: str = ".") -> str:
+        """Compose signature parts into a tag string."""
+        parts = list(self.args) + list(self.kwargs.values())
+        return delimiter.join(str(p) for p in parts) if parts else ""
+
+
+@dataclass(frozen=True)
 @dataclass_transform(frozen_default=True)
 class Node[T]:
     """Base for AST nodes. T is return type."""
 
     _tag: ClassVar[str]
+    _signature: ClassVar[Signature]
     registry: ClassVar[dict[str, type[Node[Any]]]] = {}
 
-    def __init_subclass__(cls, tag: str | None = None) -> None:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         dataclass(frozen=True)(cls)
-        cls._tag = tag if tag is not None else cls.__name__.lower().removesuffix("node")
+
+        # Store signature (kwargs only, preserves insertion order)
+        cls._signature = Signature(args=(), kwargs=kwargs)
+
+        # Compose tag from signature (fixed "." delimiter)
+        composed = cls._signature.compose(".")
+        cls._tag = composed if composed else cls.__name__.lower().removesuffix("node")
 
         if existing := Node.registry.get(cls._tag):
             if existing is not cls:
