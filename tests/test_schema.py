@@ -29,6 +29,9 @@ from typedsl.types import (
     UnionType,
 )
 
+# PEP 695 type alias for testing generic type alias extraction
+type StrKeyDict[V] = dict[str, V]
+
 
 class TestExtractPrimitives:
     """Test extracting primitive types."""
@@ -300,13 +303,9 @@ class TestPEP695TypeAlias:
 
     def test_extract_generic_type_alias(self) -> None:
         """Test extracting a generic PEP 695 type alias."""
-        # Create a generic type alias: type Pair[T] = tuple[T, T]
-        # When we use Pair[int], it should expand to tuple[int, int]
-        # But we can't use tuple in our limited type system, so let's use dict
-        exec("type StrKeyDict[V] = dict[str, V]", globals())
-        str_key_dict = globals()["StrKeyDict"]
-
-        result = extract_type(str_key_dict[int])
+        # StrKeyDict is defined at module level as: type StrKeyDict[V] = dict[str, V]
+        # When we use StrKeyDict[int], it should expand to dict[str, int]
+        result = extract_type(StrKeyDict[int])
         assert isinstance(result, DictType)
         assert isinstance(result.key, StrType)
         assert isinstance(result.value, IntType)
