@@ -40,7 +40,7 @@ class TypeDef:
     def __init_subclass__(cls, tag: str | None = None) -> None:
         """Register typedef subclass with automatic tag derivation."""
         dataclass(frozen=True)(cls)
-        cls.tag = tag if tag is not None else cls.__name__.lower().removesuffix("type")
+        cls.tag = tag if tag is not None else cls.__name__
 
         if (existing := TypeDef.registry.get(cls.tag)) and existing is not cls:
             msg = (
